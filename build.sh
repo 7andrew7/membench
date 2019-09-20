@@ -1,3 +1,3 @@
 #!/bin/sh
 
-g++ -g -O2 -std=c++11 -DNDEBUG -I/Users/andrew/benchmark/include -L/Users/andrew/benchmark/build/src -lpthread -lbenchmark membench.cc -o mybenchmark
+g++ -g -O2 -std=c++11 -DNDEBUG -I/home/ec2-user/benchmark/include -L/home/ec2-user/benchmark/build/src membench.cc -lpthread -lbenchmark -o membench

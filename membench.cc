@@ -5,6 +5,9 @@
 
 #include <stdlib.h>
 #include <sys/stat.h>
+#include <stdarg.h>
+#include <unistd.h>
+#include <fcntl.h>
 
 #include "benchmark/benchmark.h"
 
@@ -84,13 +87,13 @@ static void FlushPageCache() {
     EFAIL(system("sync; echo 3 > /proc/sys/vm/drop_caches"));
 }
 
-static const char *path = "./BIGFILE";
+static const char *path = "/mnt/scratch1/BIGFILE";
 
 static void CreateFileIfNotExists() {
     struct stat stat_buf;
     if (stat(path, &stat_buf)) {
         fprintf(stderr, "Writing to %s\n", path);
-        EFAIL(system("dd if=/dev/zero of=./BIGFILE bs=1048576 count=65536"));
+        EFAIL(system("dd if=/dev/zero of=/mnt/scratch1/BIGFILE bs=1048576 count=65536"));
     }
 }
 
