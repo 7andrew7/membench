@@ -8,6 +8,7 @@
 #include <stdarg.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <malloc.h>
 
 #include "benchmark/benchmark.h"
 
@@ -21,12 +22,8 @@ unsigned long long pos = 0;
             DIE(__x, "%s/%d: %s", __func__, __LINE__, #call);          \
     } while (0)
 
-#define CHECK(call)                                                    \
-    do {                                                               \
-        int __x;                                                       \
-        if ((__x = (call)) == 0)                                       \
-            DIE(__x, "%s/%d: %s", __func__, __LINE__, #call);          \
-    } while (0)
+#define CHECK(exp)                                                    \
+  ( (exp) ? (void)0: DIE(0, "%s/%d: %s", __func__, __LINE__, #exp))
 
 static void DIE(int e, const char *fmt, ...) {
     va_list ap;
@@ -107,23 +104,68 @@ static void BM_DiskScan(benchmark::State &state) {
     FlushPageCache();
 
     int fd = open(path, O_RDONLY | O_DIRECT);
-    CHECK(fd);
+    void *buffer = memalign(BLOCK_SIZE, BLOCK_SIZE);
 
-    char buffer[BLOCK_SIZE];
+    CHECK(buffer);
+    CHECK(fd);
 
     for (auto _ : state) {
         for (size_t i=0; i < num_blocks; i++) {
-            size_t ret = read(fd, buffer, BLOCK_SIZE);
-            CHECK(ret == 4096);
+	    ssize_t ret = read(fd, buffer, BLOCK_SIZE);
+	    if (ret != 4096) {
+	      printf("failed read: %lld\n", ret);
+	      perror("read");
+	      exit(1);
+	    }
         }
     }
 
     close(fd);
+    free(buffer);
     state.SetBytesProcessed(int64_t(state.iterations()) * sz);
     state.counters["BufferSize"] = sz;
-    
 }
 
 BENCHMARK(BM_DiskScan)->Arg(1)->Arg(4)->Arg(16)->Arg(32)->Arg(64)->MinTime(2);
+
+static void BM_DiskSeekRandom(benchmark::State &state) {
+  
+    size_t sz = state.range(0) * 1024 * 1024 * 1024;
+    size_t num_blocks = sz / BLOCK_SIZE;
+
+    CreateFileIfNotExists();
+    FlushPageCache();
+
+    int fd = open(path, O_RDONLY | O_DIRECT);
+    void *buffer = memalign(BLOCK_SIZE, BLOCK_SIZE);
+
+    CHECK(buffer);
+    CHECK(fd);
+
+    std::vector<unsigned long long> vec(num_blocks);
+
+    std::iota (std::begin(vec), std::end(vec), 0);
+    auto rng = std::default_random_engine {};
+    std::shuffle(std::begin(vec), std::end(vec), rng);
+    
+    for (auto _ : state) {
+        for (size_t i=0; i < num_blocks; i++) {
+	  off_t offset = vec[i] * BLOCK_SIZE;
+	  size_t ret = pread(fd, buffer, BLOCK_SIZE, offset);
+	  if (ret != 4096) {
+      	      perror("pread");
+	      exit(1);
+	  }
+        }
+    }
+
+    close(fd);
+    free(buffer);
+    state.SetBytesProcessed(int64_t(state.iterations()) * sz);
+    state.counters["BufferSize"] = sz;   
+}
+
+BENCHMARK(BM_DiskSeekRandom)->Arg(1)->Arg(4)->Arg(16)->Arg(32)->Arg(64)->MinTime(2);
+
 
 BENCHMARK_MAIN();
